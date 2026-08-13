@@ -94,12 +94,15 @@ npm run test            # tests de dominio (vitest)
 npm run dev               # API + worker en :3000
 ```
 
-**Decisiones tomadas hoy (con trade-off documentado en `src/README.md`):**
+**Decisiones tomadas (con trade-off documentado en `src/README.md`):**
 - `pg` crudo + `node-pg-migrate` (SQL explícito) en vez de un ORM.
 - Worker de BullMQ corriendo in-process con la API (separar cuando escale).
 - IDs `serial`, no UUID.
-- `channels/`, `integrations/` solo tienen lo que se usa hoy (`whatsapp/mockSender.ts`); `telegram/`, `shopify/`, `dropi/` se agregan cuando haya integración real, no antes.
+- `channels/`, `integrations/` solo tienen lo que se usa hoy (`whatsapp/mockSender.ts`, `shopify/`); `telegram/`, `dropi/` se agregan cuando haya integración real, no antes.
+- Webhook real de Shopify (`POST /webhooks/shopify/orders/create`, HMAC verificado) ya reemplaza al endpoint mock como entrada de producción para Dovi — ver `src/README.md §Connecting a real Shopify store`. **Pendiente del dueño:** dominio `.myshopify.com` de Dovi y el signing secret del webhook (crearlo en Shopify Admin) para que quede recibiendo tráfico real; sin eso el código está probado con un payload simulado pero no conectado de verdad.
+- Se asume que todo pedido de Dovi es COD (Releasit) — sin filtro por gateway de pago.
 
-**Siguiente paso propuesto:** integración real con Shopify (webhook de pedidos
-de Dovi) para reemplazar el endpoint de pedido mock, o WhatsApp Cloud API real
-reemplazando `mockSender.ts` — a definir con el dueño.
+**Siguiente paso propuesto:** conseguir dominio + secret de Shopify y desplegar
+(Railway/Render) o usar un túnel (ngrok) para probar el webhook en vivo; o
+avanzar con WhatsApp Cloud API real reemplazando `mockSender.ts` — a definir
+con el dueño.
