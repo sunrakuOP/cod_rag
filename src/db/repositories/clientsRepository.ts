@@ -20,6 +20,16 @@ function mapClientRow(row: any): Client {
   };
 }
 
+export async function findClientById(id: number): Promise<Client | null> {
+  const result = await pool.query(
+    `SELECT ${SELECT_CLIENT_COLUMNS} FROM clients WHERE id = $1 AND active = TRUE`,
+    [id],
+  );
+
+  const row = result.rows[0];
+  return row ? mapClientRow(row) : null;
+}
+
 export async function findClientBySlug(slug: string): Promise<Client | null> {
   const result = await pool.query(
     `SELECT ${SELECT_CLIENT_COLUMNS} FROM clients WHERE slug = $1 AND active = TRUE`,

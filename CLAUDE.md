@@ -66,8 +66,8 @@ src/
 - **Métricas primero.** Todo feature que toque pedidos debe dejar rastro medible (para el case study y el CV).
 
 ## 7. Definición de "listo" para la Oferta A
-- [x] Un pedido de prueba entra, se confirma por WhatsApp (mock) y queda registrado.
-- [ ] Reintentos con cadencia configurable, idempotentes.
+- [x] Un pedido de prueba entra, se confirma por WhatsApp (real, Cloud API) y queda registrado.
+- [x] Reintentos con cadencia configurable, idempotentes. **Gap conocido:** nada marca todavía un pedido como `confirmed` (falta el webhook entrante que lea la respuesta del cliente) — hasta que exista, todo pedido agota la cadena y termina en `no_show`. El mecanismo de reintento en sí ya está probado.
 - [ ] Marcado a Dropi (mock aceptable) tras confirmación.
 - [ ] Notificación a Telegram.
 - [ ] Métricas: confirmación %, no-shows antes/después, pedidos/día automáticos (la tabla `messages` ya deja el rastro; falta el reporte).
@@ -103,8 +103,11 @@ npm run dev               # API + worker en :3000
 - Se asume que todo pedido de Dovi es COD (Releasit) — sin filtro por gateway de pago.
 - **Deployado en Railway (2026-08-12).** Proyecto `cod-rag`, servicio `cod-rag-api` (Express + worker in-process, un solo servicio) + plugins `Postgres` y `Redis` (variables referenciadas: `DATABASE_URL=${{Postgres.DATABASE_URL}}`, `REDIS_URL=${{Redis.REDIS_URL}}`, ambas sobre la red privada de Railway). URL pública: `https://cod-rag-api-production.up.railway.app`. Webhook de Shopify reapuntado ahí, verificado con una segunda notificación de prueba real. Ngrok y el server/Docker local ya no hacen falta, quedaron apagados.
 - **Migraciones corren en `prestart`** (`npm run migrate:up:prod`, hook estándar de npm antes de `start`) — Railway no expone su Postgres a la red pública por default, así que no se puede migrar desde la laptop con `railway run` (ese comando ejecuta local, no dentro de la red privada); correrlas al boot del contenedor evita necesitar el proxy público o SSH. Son idempotentes (tabla `pgmigrations`), así que reiniciar el contenedor no las reaplica de más.
-- Costo real de Railway (Postgres + Redis + app, plan de uso) — sin visibilidad de precio automatizada; revisar el dashboard de Railway para el gasto real corriente.
+- Costo real de Railway (Postgres + Redis + app, plan de uso) — sin visibilidad de precio automatizada; revisar el dashboard de Railway para el gasto real corriente. Trial sin suscripción activa → no se pudo poner un límite de gasto (`railway usage limit set` lo exige); revisar si conviene pasar a un plan pago solo por eso.
+- **WhatsApp Cloud API real conectado (2026-08-13).** `channels/whatsapp/mockSender.ts` reemplazado por `cloudApiSender.ts`. Número real de Dovi: `+57 305 2589325` (Phone Number ID `1254313717770824`, WABA "Dovi" `2097679467793481`) — verificado, registrado en la Cloud API (paso aparte de la verificación, ver `src/README.md §Connecting a real WhatsApp Cloud API number`), con permisos otorgados al usuario del sistema `Dovi Bot Backend` y token **permanente** (nunca expira) cargado en Railway. Plantilla `order_confirmation` (utility, `es_CO`) creada y **en revisión de Meta** al cierre de esta sesión — el envío real todavía no se probó de punta a punta, solo el mock/hello_world.
+- **Reintentos con cadencia (2026-08-13).** `queue/retryQueue.ts` + `retryWorker.ts`: tras el envío inicial, se programa un chequeo a `client.retry_cadence_minutes[0]` (15 min), que reintenta si el pedido sigue `pending_confirmation`, y así hasta agotar la cadencia (`[15,60,180]` por default), donde marca `no_show`. Probado en Railway: el envío inicial falló (plantilla aún en revisión) y el sistema no crasheó ni hizo retry-loop — registró el fallo y programó el primer reintento correctamente. `confirmationQueue` bajó a `attempts:1` (BullMQ) porque la cadencia ya es el único mecanismo de reintento — tenerlos duplicados generaba cadenas de reintento superpuestas.
 
-**Siguiente paso propuesto:** WhatsApp Cloud API real reemplazando
-`mockSender.ts`, para que el próximo pedido real de Dovi mande un mensaje de
-verdad — a definir con el dueño.
+**Siguiente paso propuesto:** esperar la aprobación de la plantilla `order_confirmation`
+y probar un envío real de punta a punta; después, el webhook entrante de WhatsApp
+(leer la respuesta del cliente → marcar `confirmed`) es lo que le da sentido real
+a la cadencia de reintentos — a definir con el dueño.
