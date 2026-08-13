@@ -43,7 +43,8 @@ src/
 ├── channels/whatsapp/         # cloudApiSender.ts — real Meta Graph API calls
 ├── integrations/
 │   ├── shopify/                 # HMAC verification + payload mapping (pure, unit tested)
-│   └── whatsapp/                # HMAC verification + inbound payload parsing (pure, unit tested)
+│   ├── whatsapp/                # HMAC verification + inbound payload parsing (pure, unit tested)
+│   └── dropi/mockClient.ts      # mock "mark ready for dispatch" call (no real Dropi token yet)
 ├── queue/
 │   ├── confirmationQueue.ts + confirmationWorker.ts  # first send
 │   └── retryQueue.ts + retryWorker.ts                # cadence-driven resends
@@ -53,7 +54,9 @@ src/
 │   └── repositories/           # parameterized queries, no ORM
 ├── api/
 │   ├── routes/                  # testOrders.ts, shopifyWebhook.ts (order in), whatsappWebhook.ts (reply in)
-│   └── services/confirmationIntake.ts  # shared decision+idempotency+enqueue logic
+│   └── services/
+│       ├── confirmationIntake.ts  # shared decision+idempotency+enqueue logic
+│       └── dispatchIntake.ts      # mock Dropi call + orders.status → dispatched, run after a confirm
 └── observability/logger.ts     # pino structured logging
 ```
 
@@ -75,6 +78,7 @@ src/
 - Resolves the tenant from `value.metadata.phone_number_id` in the payload (`clients.whatsapp_phone_number_id`), then finds that client's most recent `pending_confirmation` order for the sending phone number and marks it `confirmed`.
 - **Any inbound message counts as a confirmation** — there's no button-based template yet, so there's no structured yes/no signal to key off. A reply like "no quiero" gets marked confirmed the same as "sí". Documented simplification, revisit once an interactive-button template exists (see trade-offs).
 - Verified working: Meta's dashboard-triggered synthetic test payload reached the endpoint, passed signature verification, and was handled correctly. Real customer replies don't arrive yet — see "Known gap" above.
+- **After a successful confirm, `dispatchIntake.markOrderDispatchedIfConfirmed` runs**: calls the mock Dropi client, then flips `orders.status` to `dispatched`. Only runs when `markOrderConfirmed`'s return value says *this* call was the one that made the transition (not a stale in-memory `order.status` — see trade-offs) — a redelivered webhook for an already-dispatched order is a no-op, both by that check and by `markOrderDispatched`'s own guarded `UPDATE ... WHERE status = 'confirmed'`.
 
 **Data model:** `clients` (tenant config, incl. `shopify_shop_domain` and `whatsapp_phone_number_id`) → `orders` → `messages` (every attempt, inbound and outbound) → `idempotency_keys` (dedup per order+event).
 
@@ -100,6 +104,9 @@ Nothing here is computed after the fact — every attempt is logged at the momen
 - **Any inbound WhatsApp message confirms the order — no keyword or button matching.** Simplest signal available without an interactive-button template (see "Connecting a real WhatsApp Cloud API number"); trades false-positive risk (a "no" reads as a confirmation) for not building a fragile keyword list. Revisit once a Quick Reply button template exists — Meta returns an unambiguous button ID instead of free text.
 - **WhatsApp credentials (`WHATSAPP_ACCESS_TOKEN`/`WHATSAPP_PHONE_NUMBER_ID`) are global env vars, not per-client DB config**, unlike `shopify_shop_domain` and `whatsapp_phone_number_id` (which *are* per-client, for routing/lookup). Fine with one real WhatsApp-sending client (Dovi); a second client needing their own WhatsApp number would need this promoted to per-client config and a second System User token — not built because there's no second client yet.
 - **Publishing the app is a real, undone prerequisite for real inbound traffic** — it needs a public privacy-policy URL, and blocks on Dovi's Shopify store still being password-protected pre-launch. Not something to route around (a fake privacy-policy URL would be worse than leaving this documented as pending).
+- **Dropi dispatch mock runs inline (no queue), unlike WhatsApp sends.** The mock has no real I/O to fail or time out, so a BullMQ queue would be speculative infrastructure. Once a real Dropi token exists, this call becomes a fallible network request and should be promoted to the same queue+cadence+idempotency-key pattern already proven for WhatsApp (`confirmationQueue`/`retryQueue`) — not reinvented.
+- **No `dropi_order_id` column yet.** The mock's fake tracking id is only in the structured log (`order marked ready for dispatch (mock Dropi)`), not persisted. Add the column once a real Dropi call returns an id worth keeping for ops/metrics.
+- **`markOrderConfirmed` returns whether it actually made the transition**, instead of void — the caller's in-memory `order` object is stale the instant the UPDATE runs (built from a `pending_confirmation`-only query), so a boolean return is what tells `whatsappWebhook.ts` whether to trigger dispatch, not a re-check of the local object.
 
 ## Running locally
 

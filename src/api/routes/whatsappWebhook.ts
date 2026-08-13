@@ -6,6 +6,7 @@ import {
   findMostRecentPendingOrderByPhone,
   markOrderConfirmed,
 } from "../../db/repositories/ordersRepository";
+import { markOrderDispatchedIfConfirmed } from "../services/dispatchIntake";
 import { recordMessage } from "../../db/repositories/messagesRepository";
 import { env } from "../../config/env";
 import { logger } from "../../observability/logger";
@@ -72,7 +73,11 @@ whatsappWebhookRouter.post("/webhooks/whatsapp/messages", async (req, res) => {
     return res.sendStatus(200);
   }
 
-  await markOrderConfirmed(order.id);
+  const confirmed = await markOrderConfirmed(order.id);
+  if (confirmed) {
+    await markOrderDispatchedIfConfirmed(order.id);
+  }
+
   await recordMessage({
     orderId: order.id,
     clientId: client.id,

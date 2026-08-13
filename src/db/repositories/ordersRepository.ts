@@ -78,11 +78,28 @@ export async function markOrderNoShow(id: number): Promise<void> {
 
 /**
  * Same guard, for the inbound-reply path: only ever moves a still-pending
- * order to confirmed, never overwrites no_show/dispatched.
+ * order to confirmed, never overwrites no_show/dispatched. Returns whether
+ * this call was the one that made the transition — callers that need to
+ * trigger a next step (e.g. dispatch) on the confirm should check this
+ * instead of assuming their in-memory `order.status` is still fresh.
  */
-export async function markOrderConfirmed(id: number): Promise<void> {
-  await pool.query(
+export async function markOrderConfirmed(id: number): Promise<boolean> {
+  const result = await pool.query(
     `UPDATE orders SET status = 'confirmed' WHERE id = $1 AND status = 'pending_confirmation'`,
+    [id],
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
+/**
+ * Same guard, one step further: only a still-confirmed order can move to
+ * dispatched. Prevents a duplicate dispatch trigger (e.g. a second inbound
+ * webhook hit for the same phone) from re-running the Dropi call once this
+ * has already happened once.
+ */
+export async function markOrderDispatched(id: number): Promise<void> {
+  await pool.query(
+    `UPDATE orders SET status = 'dispatched' WHERE id = $1 AND status = 'confirmed'`,
     [id],
   );
 }
