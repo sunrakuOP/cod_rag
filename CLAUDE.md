@@ -99,10 +99,11 @@ npm run dev               # API + worker en :3000
 - Worker de BullMQ corriendo in-process con la API (separar cuando escale).
 - IDs `serial`, no UUID.
 - `channels/`, `integrations/` solo tienen lo que se usa hoy (`whatsapp/mockSender.ts`, `shopify/`); `telegram/`, `dropi/` se agregan cuando haya integración real, no antes.
-- Webhook real de Shopify (`POST /webhooks/shopify/orders/create`, HMAC verificado) ya reemplaza al endpoint mock como entrada de producción para Dovi — ver `src/README.md §Connecting a real Shopify store`. **Pendiente del dueño:** dominio `.myshopify.com` de Dovi y el signing secret del webhook (crearlo en Shopify Admin) para que quede recibiendo tráfico real; sin eso el código está probado con un payload simulado pero no conectado de verdad.
+- **Webhook real de Shopify conectado y verificado (2026-08-12).** `POST /webhooks/shopify/orders/create` recibe tráfico real de la tienda de Dovi. Dominio: `f1zauf-q1.myshopify.com` (no `dovi-9909.myshopify.com`, que también aparece conectado en Settings → Domains pero no es el que Shopify usa para firmar webhooks — se confirmó mandando una notificación de prueba real y leyendo el header `X-Shopify-Shop-Domain` en el log). Signing secret en `.env` local (nunca commiteado). Probado con la notificación de prueba de Shopify: firma verificó, pedido se creó, se encoló, worker mock lo procesó — dato de prueba borrado de la DB después.
 - Se asume que todo pedido de Dovi es COD (Releasit) — sin filtro por gateway de pago.
+- **Expuesto hoy vía ngrok** (`https://bruising-clobber-cursive.ngrok-free.dev`) para probar en vivo sin desplegar. La URL cambia si se reinicia el túnel — si eso pasa hay que reeditar la URL del webhook en Shopify Admin.
 
-**Siguiente paso propuesto:** conseguir dominio + secret de Shopify y desplegar
-(Railway/Render) o usar un túnel (ngrok) para probar el webhook en vivo; o
-avanzar con WhatsApp Cloud API real reemplazando `mockSender.ts` — a definir
-con el dueño.
+**Siguiente paso propuesto:** deploy real (Railway/Render, Fase B de
+`infraestructura_paso_a_paso.md`) para tener una URL estable en vez de
+depender de ngrok; o avanzar con WhatsApp Cloud API real reemplazando
+`mockSender.ts` — a definir con el dueño.

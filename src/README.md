@@ -89,6 +89,9 @@ curl -X POST http://localhost:3000/api/test-orders \
 
 ## Connecting a real Shopify store
 
-1. Set the store's `.myshopify.com` domain: `UPDATE clients SET shopify_shop_domain = '<store>.myshopify.com' WHERE slug = '<client-slug>';`
+1. Don't trust Settings → Domains for the `.myshopify.com` value — a store can show more than one connected `.myshopify.com` domain (e.g. after a rename), and only one of them is what Shopify actually puts in the `X-Shopify-Shop-Domain` header. Create the webhook first (step 2), send a test notification, and read the `shopDomain` the server logs on the resulting `401` (signature not yet configured, but the domain in the log is real) — that's the value to use.
 2. In Shopify Admin → Settings → Notifications → Webhooks, create a webhook for the **Order creation** event, format JSON, pointing at `https://<your-public-host>/webhooks/shopify/orders/create`. The signing secret shown on that page (shared across all webhooks configured that way) goes in `.env` as `SHOPIFY_WEBHOOK_SECRET`.
-3. `localhost` isn't reachable from Shopify — for live local testing, tunnel it (e.g. `ngrok http 3000`) and use the tunnel URL in step 2. Otherwise this only starts receiving real traffic once deployed (Railway/Render, per `infraestructura_paso_a_paso.md`).
+3. `UPDATE clients SET shopify_shop_domain = '<confirmed-domain>' WHERE slug = '<client-slug>';` using the domain confirmed in step 1.
+4. `localhost` isn't reachable from Shopify — for live local testing, tunnel it (e.g. `ngrok http 3000`) and use the tunnel URL in step 2; if the tunnel restarts, the URL changes and the webhook needs re-editing. Otherwise this only starts receiving real traffic once deployed (Railway/Render, per `infraestructura_paso_a_paso.md`).
+
+Confirmed working for Dovi (2026-08-12): domain is `f1zauf-q1.myshopify.com`, not `dovi-9909.myshopify.com` (also shown as connected).
