@@ -6,13 +6,15 @@
   "scripts": {
     "dev": "tsx watch src/api/server.ts",
     "build": "tsc -p tsconfig.json",
+    "prestart": "npm run migrate:up:prod",
     "start": "node dist/api/server.js",
     "test": "vitest run",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "migrate:up": "dotenv -e .env -- node-pg-migrate up --migrations-dir src/db/migrations",
     "migrate:down": "dotenv -e .env -- node-pg-migrate down --migrations-dir src/db/migrations",
-    "migrate:create": "node-pg-migrate create --migrations-dir src/db/migrations"
+    "migrate:create": "node-pg-migrate create --migrations-dir src/db/migrations",
+    "migrate:up:prod": "node-pg-migrate up --migrations-dir src/db/migrations"
   },
   "keywords": [],
   "author": "",

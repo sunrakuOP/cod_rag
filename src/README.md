@@ -94,4 +94,16 @@ curl -X POST http://localhost:3000/api/test-orders \
 3. `UPDATE clients SET shopify_shop_domain = '<confirmed-domain>' WHERE slug = '<client-slug>';` using the domain confirmed in step 1.
 4. `localhost` isn't reachable from Shopify — for live local testing, tunnel it (e.g. `ngrok http 3000`) and use the tunnel URL in step 2; if the tunnel restarts, the URL changes and the webhook needs re-editing. Otherwise this only starts receiving real traffic once deployed (Railway/Render, per `infraestructura_paso_a_paso.md`).
 
-Confirmed working for Dovi (2026-08-12): domain is `f1zauf-q1.myshopify.com`, not `dovi-9909.myshopify.com` (also shown as connected).
+Confirmed working for Dovi (2026-08-12): domain is `f1zauf-q1.myshopify.com`, not `dovi-9909.myshopify.com` (also shown as connected). Deployed at `https://cod-rag-api-production.up.railway.app` — that's the current webhook target, ngrok is no longer used.
+
+## Deployment (Railway)
+
+Project `cod-rag`: one service (`cod-rag-api`, runs the API and the BullMQ worker in-process — see trade-offs) plus `Postgres` and `Redis` plugins, wired via Railway's variable references (`DATABASE_URL=${{Postgres.DATABASE_URL}}`, `REDIS_URL=${{Redis.REDIS_URL}}`) over Railway's private network.
+
+Migrations run in `prestart` (`npm run migrate:up:prod`, a plain `node-pg-migrate up` relying on the env vars Railway injects directly — no `.env`/`dotenv-cli` in production) — Railway's Postgres isn't reachable from a laptop by default (`railway run` executes locally, not inside the private network, and there's no public proxy enabled), so migrating on container boot was simpler than opening one up. Migrations are idempotent (tracked in `pgmigrations`), so redeploys don't reapply anything.
+
+```bash
+railway up --service cod-rag-api --ci   # build + deploy
+railway logs --service cod-rag-api      # tail logs, confirm migrations + "server listening"
+railway variable set KEY=VALUE --service cod-rag-api --skip-deploys   # add/change a var without redeploying
+```

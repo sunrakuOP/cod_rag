@@ -101,9 +101,10 @@ npm run dev               # API + worker en :3000
 - `channels/`, `integrations/` solo tienen lo que se usa hoy (`whatsapp/mockSender.ts`, `shopify/`); `telegram/`, `dropi/` se agregan cuando haya integración real, no antes.
 - **Webhook real de Shopify conectado y verificado (2026-08-12).** `POST /webhooks/shopify/orders/create` recibe tráfico real de la tienda de Dovi. Dominio: `f1zauf-q1.myshopify.com` (no `dovi-9909.myshopify.com`, que también aparece conectado en Settings → Domains pero no es el que Shopify usa para firmar webhooks — se confirmó mandando una notificación de prueba real y leyendo el header `X-Shopify-Shop-Domain` en el log). Signing secret en `.env` local (nunca commiteado). Probado con la notificación de prueba de Shopify: firma verificó, pedido se creó, se encoló, worker mock lo procesó — dato de prueba borrado de la DB después.
 - Se asume que todo pedido de Dovi es COD (Releasit) — sin filtro por gateway de pago.
-- **Expuesto hoy vía ngrok** (`https://bruising-clobber-cursive.ngrok-free.dev`) para probar en vivo sin desplegar. La URL cambia si se reinicia el túnel — si eso pasa hay que reeditar la URL del webhook en Shopify Admin.
+- **Deployado en Railway (2026-08-12).** Proyecto `cod-rag`, servicio `cod-rag-api` (Express + worker in-process, un solo servicio) + plugins `Postgres` y `Redis` (variables referenciadas: `DATABASE_URL=${{Postgres.DATABASE_URL}}`, `REDIS_URL=${{Redis.REDIS_URL}}`, ambas sobre la red privada de Railway). URL pública: `https://cod-rag-api-production.up.railway.app`. Webhook de Shopify reapuntado ahí, verificado con una segunda notificación de prueba real. Ngrok y el server/Docker local ya no hacen falta, quedaron apagados.
+- **Migraciones corren en `prestart`** (`npm run migrate:up:prod`, hook estándar de npm antes de `start`) — Railway no expone su Postgres a la red pública por default, así que no se puede migrar desde la laptop con `railway run` (ese comando ejecuta local, no dentro de la red privada); correrlas al boot del contenedor evita necesitar el proxy público o SSH. Son idempotentes (tabla `pgmigrations`), así que reiniciar el contenedor no las reaplica de más.
+- Costo real de Railway (Postgres + Redis + app, plan de uso) — sin visibilidad de precio automatizada; revisar el dashboard de Railway para el gasto real corriente.
 
-**Siguiente paso propuesto:** deploy real (Railway/Render, Fase B de
-`infraestructura_paso_a_paso.md`) para tener una URL estable en vez de
-depender de ngrok; o avanzar con WhatsApp Cloud API real reemplazando
-`mockSender.ts` — a definir con el dueño.
+**Siguiente paso propuesto:** WhatsApp Cloud API real reemplazando
+`mockSender.ts`, para que el próximo pedido real de Dovi mande un mensaje de
+verdad — a definir con el dueño.
