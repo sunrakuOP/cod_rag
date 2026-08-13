@@ -54,3 +54,20 @@ export async function findClientByShopDomain(shopDomain: string): Promise<Client
   const row = result.rows[0];
   return row ? mapClientRow(row) : null;
 }
+
+/**
+ * Resolves an inbound WhatsApp webhook to a tenant, from the phone_number_id
+ * in value.metadata — the only identifier Meta includes on an inbound
+ * message.
+ */
+export async function findClientByWhatsappPhoneNumberId(
+  phoneNumberId: string,
+): Promise<Client | null> {
+  const result = await pool.query(
+    `SELECT ${SELECT_CLIENT_COLUMNS} FROM clients WHERE whatsapp_phone_number_id = $1 AND active = TRUE`,
+    [phoneNumberId],
+  );
+
+  const row = result.rows[0];
+  return row ? mapClientRow(row) : null;
+}

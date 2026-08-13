@@ -23,11 +23,16 @@ decision/idempotency/queue logic (`api/services/confirmationIntake.ts`) is
 shared by every order source, so it can't drift between the manual endpoint
 and the Shopify webhook.
 
-**Known gap:** nothing currently flips `orders.status` to `confirmed` —
-that requires reading the customer's WhatsApp reply (an inbound webhook,
-not built yet). Until then, every order runs its full retry cadence and
-ends up `no_show`. The retry mechanism itself is real and tested; it's
-just missing the one signal that would let it stop early.
+**Known gap:** the inbound WhatsApp webhook (`POST /webhooks/whatsapp/messages`)
+that flips `orders.status` to `confirmed` is built and verified — Meta's
+synthetic test payload reached it, passed signature verification, and was
+handled correctly — but **the app isn't published**, so Meta doesn't deliver
+real customer messages to it yet (only dashboard-triggered test payloads).
+Publishing needs a public privacy-policy URL, and Dovi's Shopify store is
+still password-protected pre-launch, so the auto-generated policy page isn't
+reachable by Meta. Until the store goes public (or another public policy URL
+is provided), inbound confirmations don't arrive and every order still runs
+its full retry cadence to `no_show`.
 
 ## Architecture
 
@@ -36,7 +41,9 @@ src/
 ├── config/env.ts              # validates process.env with zod, fails fast on boot
 ├── domain/confirmation.ts     # shouldConfirm(order) — pure, no I/O, unit tested
 ├── channels/whatsapp/         # cloudApiSender.ts — real Meta Graph API calls
-├── integrations/shopify/      # HMAC verification + payload mapping (pure, unit tested)
+├── integrations/
+│   ├── shopify/                 # HMAC verification + payload mapping (pure, unit tested)
+│   └── whatsapp/                # HMAC verification + inbound payload parsing (pure, unit tested)
 ├── queue/
 │   ├── confirmationQueue.ts + confirmationWorker.ts  # first send
 │   └── retryQueue.ts + retryWorker.ts                # cadence-driven resends
@@ -45,7 +52,7 @@ src/
 │   ├── migrations/             # node-pg-migrate, raw SQL via pgm.sql()
 │   └── repositories/           # parameterized queries, no ORM
 ├── api/
-│   ├── routes/                  # testOrders.ts (manual), shopifyWebhook.ts (real)
+│   ├── routes/                  # testOrders.ts, shopifyWebhook.ts (order in), whatsappWebhook.ts (reply in)
 │   └── services/confirmationIntake.ts  # shared decision+idempotency+enqueue logic
 └── observability/logger.ts     # pino structured logging
 ```
@@ -55,21 +62,28 @@ src/
 2. `upsertOrder` — same `(client_id, external_order_id)` always resolves to the same row, so a duplicated intake call (or a Shopify retry — webhooks are at-least-once delivery) doesn't create a second order.
 3. `confirmationIntake.intakeOrderForConfirmation`: `domain/shouldConfirm(order)` (pure decision, only `pending_confirmation` orders get confirmed) → claim `idempotency_keys` (`INSERT ... ON CONFLICT (key) DO NOTHING`; the UNIQUE constraint *is* the lock, no check-then-act race) → enqueue a BullMQ job if both pass.
 4. The confirmation worker calls the WhatsApp Cloud API and writes a row to `messages` — `sent` or `failed`, either way. It then looks up the client's `retry_cadence_minutes` (e.g. `[15, 60, 180]`) and schedules the first retry-check job at `cadence[0]` minutes out, regardless of whether the send itself succeeded (a failed send and an unconfirmed one both mean "no confirmation reached the customer yet").
-5. Each retry-check job re-reads the order fresh: if it's no longer `pending_confirmation`, the chain stops (a future inbound-reply webhook would cause this). Otherwise it claims a new idempotency key (`order:{id}:confirm_retry_{n}`), resends, and schedules the next cadence step — or, once the cadence is exhausted, marks the order `no_show`.
+5. Each retry-check job re-reads the order fresh: if it's no longer `pending_confirmation`, the chain stops — the inbound WhatsApp webhook (below) is what causes this in practice. Otherwise it claims a new idempotency key (`order:{id}:confirm_retry_{n}`), resends, and schedules the next cadence step — or, once the cadence is exhausted, marks the order `no_show`.
 
 **Shopify webhook specifics (`POST /webhooks/shopify/orders/create`):**
 - Assumes every order is COD (true for a Releasit-driven COD store like Dovi's) — no payment-gateway filtering.
 - Phone is looked up with a fallback chain (`phone` → `shipping_address.phone` → `customer.phone` → `billing_address.phone`) since where COD-form apps put it varies by store. An order with no phone anywhere is not persisted — logged and acknowledged with `200`, since there's nothing to confirm without a contact number.
 - Always returns `2xx` once the signature is valid, even for a skipped order — Shopify needs a fast ack and will retry (then eventually disable the webhook) on repeated non-2xx responses, so failures we can already explain (unknown shop, no phone) are not treated as delivery failures.
 
-**Data model:** `clients` (tenant config, incl. `shopify_shop_domain`) → `orders` → `messages` (every send attempt, real or mocked) → `idempotency_keys` (dedup per order+event).
+**Inbound WhatsApp webhook specifics (`GET`/`POST /webhooks/whatsapp/messages`):**
+- `GET` handles Meta's one-time verification handshake (`hub.mode`/`hub.verify_token`/`hub.challenge`), checked against `WHATSAPP_WEBHOOK_VERIFY_TOKEN` — an arbitrary string we chose, not something Meta issues.
+- `POST` verifies `X-Hub-Signature-256` (hex, `sha256=` prefix — a different format from Shopify's base64 header, signed with the Meta app's App Secret, not the WhatsApp access token) against the raw body.
+- Resolves the tenant from `value.metadata.phone_number_id` in the payload (`clients.whatsapp_phone_number_id`), then finds that client's most recent `pending_confirmation` order for the sending phone number and marks it `confirmed`.
+- **Any inbound message counts as a confirmation** — there's no button-based template yet, so there's no structured yes/no signal to key off. A reply like "no quiero" gets marked confirmed the same as "sí". Documented simplification, revisit once an interactive-button template exists (see trade-offs).
+- Verified working: Meta's dashboard-triggered synthetic test payload reached the endpoint, passed signature verification, and was handled correctly. Real customer replies don't arrive yet — see "Known gap" above.
+
+**Data model:** `clients` (tenant config, incl. `shopify_shop_domain` and `whatsapp_phone_number_id`) → `orders` → `messages` (every attempt, inbound and outbound) → `idempotency_keys` (dedup per order+event).
 
 ## Metrics
 
 `messages.status` + `messages.cost_estimate` are the raw material for:
 - Confirmation rate (`mocked_sent` / total orders needing confirmation).
 - Cost per confirmation (real once WhatsApp is live — 0 in mock mode).
-- No-shows before/after, once `orders.status` transitions are wired to real webhook events.
+- No-shows before/after — `orders.status` now transitions to `confirmed` (inbound webhook) and `no_show` (retry cadence exhausted); a reporting query over this is the next natural step, not built yet.
 
 Nothing here is computed after the fact — every attempt is logged at the moment it happens.
 
@@ -83,6 +97,9 @@ Nothing here is computed after the fact — every attempt is logged at the momen
 - **BullMQ-level retry disabled on the confirmation queue (`attempts: 1`).** The cadence chain (`retryQueue`) is the single retry mechanism now, covering both transient send failures and unconfirmed orders with the same client-configured cadence — a second, faster BullMQ-level retry would double-schedule cadence chains on every immediate retry.
 - **Meta template name is env-configured, decoupled from the job's internal `templateName`.** `WHATSAPP_TEMPLATE_NAME` is what's actually sent to the Graph API; `templateName` on the job/message row (`"order_confirmation"`) is a business-level label recorded for metrics. Lets us point at whatever template is currently approved (`hello_world` for sandbox testing, the real one once live) without touching code.
 - **No template parameters/components.** The current `order_confirmation` template is static text — the send call doesn't pass a `components` array. Personalizing the message (customer name, order total) is future work and would need both the template and `cloudApiSender` to grow parameters together.
+- **Any inbound WhatsApp message confirms the order — no keyword or button matching.** Simplest signal available without an interactive-button template (see "Connecting a real WhatsApp Cloud API number"); trades false-positive risk (a "no" reads as a confirmation) for not building a fragile keyword list. Revisit once a Quick Reply button template exists — Meta returns an unambiguous button ID instead of free text.
+- **WhatsApp credentials (`WHATSAPP_ACCESS_TOKEN`/`WHATSAPP_PHONE_NUMBER_ID`) are global env vars, not per-client DB config**, unlike `shopify_shop_domain` and `whatsapp_phone_number_id` (which *are* per-client, for routing/lookup). Fine with one real WhatsApp-sending client (Dovi); a second client needing their own WhatsApp number would need this promoted to per-client config and a second System User token — not built because there's no second client yet.
+- **Publishing the app is a real, undone prerequisite for real inbound traffic** — it needs a public privacy-policy URL, and blocks on Dovi's Shopify store still being password-protected pre-launch. Not something to route around (a fake privacy-policy URL would be worse than leaving this documented as pending).
 
 ## Running locally
 

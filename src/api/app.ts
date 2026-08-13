@@ -2,6 +2,7 @@ import express from "express";
 import { healthRouter } from "./routes/health";
 import { testOrdersRouter } from "./routes/testOrders";
 import { shopifyWebhookRouter } from "./routes/shopifyWebhook";
+import { whatsappWebhookRouter } from "./routes/whatsappWebhook";
 import { logger } from "../observability/logger";
 
 export function createApp() {
@@ -20,6 +21,7 @@ export function createApp() {
   app.use(healthRouter);
   app.use(testOrdersRouter);
   app.use(shopifyWebhookRouter);
+  app.use(whatsappWebhookRouter);
 
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     logger.error({ err }, "unhandled request error");

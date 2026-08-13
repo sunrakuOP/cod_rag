@@ -75,3 +75,37 @@ export async function markOrderNoShow(id: number): Promise<void> {
     [id],
   );
 }
+
+/**
+ * Same guard, for the inbound-reply path: only ever moves a still-pending
+ * order to confirmed, never overwrites no_show/dispatched.
+ */
+export async function markOrderConfirmed(id: number): Promise<void> {
+  await pool.query(
+    `UPDATE orders SET status = 'confirmed' WHERE id = $1 AND status = 'pending_confirmation'`,
+    [id],
+  );
+}
+
+/**
+ * Our template has no reply buttons yet, so an inbound message can't be
+ * matched to a specific order by button payload — this matches by phone
+ * instead, picking the customer's most recently created pending order.
+ * Simplification, documented in src/README.md: two pending orders for the
+ * same phone at once would attribute the reply to the newer one.
+ */
+export async function findMostRecentPendingOrderByPhone(
+  clientId: number,
+  customerPhone: string,
+): Promise<Order | null> {
+  const result = await pool.query(
+    `SELECT ${SELECT_ORDER_COLUMNS} FROM orders
+     WHERE client_id = $1 AND customer_phone = $2 AND status = 'pending_confirmation'
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [clientId, customerPhone],
+  );
+
+  const row = result.rows[0];
+  return row ? mapOrderRow(row) : null;
+}

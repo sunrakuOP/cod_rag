@@ -15,6 +15,12 @@ const envSchema = z.object({
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
   WHATSAPP_TEMPLATE_NAME: z.string().default("hello_world"),
   WHATSAPP_TEMPLATE_LANG: z.string().default("en_US"),
+  // App Secret (Meta app dashboard > Settings > Basic) — signs inbound
+  // webhook bodies. Different value from WHATSAPP_ACCESS_TOKEN.
+  WHATSAPP_APP_SECRET: z.string().optional(),
+  // Arbitrary string we choose, entered in Meta's webhook config UI too —
+  // only used for the GET verification handshake, not from Meta.
+  WHATSAPP_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);
