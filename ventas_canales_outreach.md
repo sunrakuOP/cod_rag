@@ -108,3 +108,78 @@ Empezá con el que cierra rápido (LatAm). No esperes al cliente perfecto.
 - Entrega: no-shows antes→después, % confirmación, pedidos/día sin humano.
 - Ingreso: USD/mes **recurrente**.
 - La métrica dura ("no-shows 35%→18%") es tu joya: vende al siguiente cliente y va al CV.
+
+---
+
+## 10. Propuesta formal (Oferta A) — plantilla para enviar
+
+Se manda después de que el prospecto responde al outreach frío (sección 5) y pide detalles/precio. Reemplazá `[nombre]` y ajustá el precio dentro del rango según el caso (barato al primero, sección 6).
+
+**No incluye un caso de éxito con número todavía** — Dovi (cliente #0) tiene el sistema construido pero sin un ciclo real completo corriendo en producción (plantilla de WhatsApp en revisión de Meta al momento de escribir esto). No inventar una métrica de "antes→después" hasta tener una real. Mientras tanto, el gancho de venta es el mecanismo + el framing de lanzamiento, no un resultado ya probado.
+
+```
+📋 PROPUESTA — Confirmación COD + Anti-No-Show por WhatsApp
+══════════════════════════════════════════
+
+Automatizo la confirmación de tus pedidos COD por WhatsApp, para que
+dejes de perder plata en fletes muertos por pedidos que nadie confirmó
+a tiempo.
+
+✅ Incluye:
+- Confirmación automática por WhatsApp apenas entra el pedido (plantilla
+  utility aprobada por Meta a tu nombre, no marketing — mensaje barato)
+- Reintentos automáticos con la cadencia que definamos (ej: 15min, 1h, 3h)
+  a los pedidos que no responden
+- Marcado automático como "listo para despacho" en tu operador logístico
+  (Dropi) apenas el cliente confirma
+- Notificación tuya (o de tu equipo) por Telegram en cada despacho y en
+  cada pedido que se te escapa (no-show)
+- Reporte de métricas: % de confirmación, no-shows, pedidos/día resueltos
+  sin que nadie los toque a mano
+
+❌ No incluye (fuera del alcance):
+- La cuenta de WhatsApp Business / verificación de negocio ante Meta — es
+  tuya, yo te guío en el proceso pero la aprobación depende de Meta, no
+  de mí
+- Credenciales/token de tu operador logístico (Dropi u otro) si no los
+  tenés todavía — sin eso arranco en modo simulado y lo conecto real
+  apenas los tengas
+- Hosting del sistema (te lo dejo corriendo en Railway, el costo de
+  infraestructura es aparte — suele ser bajo, unos pocos USD/mes)
+- Mantenimiento y ajustes después de la entrega — eso es la Oferta B,
+  abajo
+
+📅 Tiempo estimado: 1-2 semanas desde que tengo tu tienda conectada y tu
+   WhatsApp Business verificado
+💰 Inversión (lanzamiento): USD [250-600] — pago único
+   → 50% para arrancar / 50% al entregar funcionando con tus pedidos reales
+   → A cambio te pido que, si funciona, me dejes usar el resultado (con o
+     sin tu nombre, como prefieras) como caso de referencia
+
+📌 Después de la entrega — Oferta B (opcional, recomendado):
+   Plan mensual de USD [200-500]/mes: mantengo el sistema corriendo,
+   ajusto la cadencia y las plantillas según lo que veamos en los datos,
+   te paso el reporte de métricas cada [semana/mes], y sumamos mejoras.
+   Sin esto, el sistema queda funcionando pero sin que nadie lo esté
+   mirando ni ajustando.
+
+📌 Condiciones:
+- El tiempo empieza a correr cuando tengo TODO lo que necesito de tu lado
+  (checklist abajo)
+- Cambios fuera de este alcance se cotizan aparte
+```
+
+**📥 Información que necesito de tu lado para arrancar:**
+- [ ] Acceso a tu tienda (Shopify u otra) para conectar el webhook de pedidos
+- [ ] Número de WhatsApp Business que vas a usar (verificado o en proceso
+      de verificación ante Meta)
+- [ ] Acceso a Meta Business Manager para configurar la plantilla de
+      mensaje a tu nombre
+- [ ] Credenciales de tu operador logístico (Dropi u otro) — si todavía no
+      las tenés, arrancamos igual en modo simulado
+- [ ] Cadencia de reintento que preferís (cada cuánto reintentar a un
+      pedido que no responde, y cuántas veces antes de darlo por perdido)
+- [ ] Un chat/número de Telegram tuyo (o de quien despache) para recibir
+      las notificaciones
+- [ ] ¿Tenés fecha límite o temporada fuerte (Black Friday, etc.) para la
+      que necesitás esto andando?
