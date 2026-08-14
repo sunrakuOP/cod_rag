@@ -30,6 +30,12 @@ const envSchema = z.object({
   // route itself fails closed (500) when unset, since there's no safe
   // "soft-fail" for an endpoint that exposes per-client business data.
   METRICS_API_KEY: z.string().optional(),
+  // Shared secret for POST /api/test-orders (x-api-key header). Separate key
+  // from METRICS_API_KEY on purpose: this route can trigger a real WhatsApp
+  // send (real cost, real recipient) for any client with credentials
+  // configured, not just read data — different blast radius, different key
+  // to rotate/scope independently. Fails closed (500) when unset.
+  TEST_ORDERS_API_KEY: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);

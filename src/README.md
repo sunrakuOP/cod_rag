@@ -28,11 +28,11 @@ that flips `orders.status` to `confirmed` is built and verified — Meta's
 synthetic test payload reached it, passed signature verification, and was
 handled correctly — but **the app isn't published**, so Meta doesn't deliver
 real customer messages to it yet (only dashboard-triggered test payloads).
-Publishing needs a public privacy-policy URL, and Dovi's Shopify store is
-still password-protected pre-launch, so the auto-generated policy page isn't
-reachable by Meta. Until the store goes public (or another public policy URL
-is provided), inbound confirmations don't arrive and every order still runs
-its full retry cadence to `no_show`.
+Publishing needs a public privacy-policy URL; Dovi's Shopify store was
+password-protected at first, blocking that, but as of 2026-08-13 the store
+and its privacy-policy page are both public — that specific blocker is gone.
+Publishing the app is still the owner's call to make (Meta business
+dashboard), not something this codebase can do.
 
 ## Architecture
 
@@ -97,7 +97,11 @@ Query logic lives in `observability/metricsReport.ts` (`getMetricsReport(clientS
 
 Before/after no-show comparison and cost per confirmation both depend on two nullable columns on `clients` (`baseline_no_show_rate`, `whatsapp_utility_cost_estimate`, migration `1786671243376`) that only the operator can fill in — a pre-automation no-show rate and a real WhatsApp Cloud API template price aren't things this system ever measured itself. Deliberately not defaulted: WhatsApp utility-template pricing varies by country/category and changes over time, so a hardcoded "current" price would go stale silently. Until an operator sets them, both the CLI and the HTTP report say "sin datos"/`null` rather than showing a misleading `0`. `cloudApiSender.ts` still returns `costEstimate: 0` (Meta's send response carries no price); `confirmationWorker`/`retryWorker` override it with `client.whatsappUtilityCostEstimate` at send time, so cost is only ever what was configured *when that message went out* — loading a cost later doesn't rewrite already-sent messages.
 
-**Left for next session:** `METRICS_API_KEY` needs to be set in Railway for the route to respond in production — until then it's a deliberate 500, not a bug.
+**Left for next session:** `METRICS_API_KEY` and `TEST_ORDERS_API_KEY` (below) both need to be set in Railway for those routes to respond in production — until then, deliberate 500s, not bugs.
+
+## Security
+
+`POST /api/test-orders` requires the same kind of `x-api-key` auth as `/api/metrics`, via a shared helper (`api/apiKeyAuth.ts`), but its own env var (`TEST_ORDERS_API_KEY`) — found and fixed in a repo-wide security review (2026-08-13). Unlike a read-only metrics endpoint, this route can trigger a real WhatsApp send (real cost, real recipient) for any client with credentials configured, so it needed its own key to scope/rotate independently rather than reusing metrics'. Fails closed (500) if unset.
 
 ## Trade-offs
 
@@ -127,9 +131,13 @@ npm run dev               # starts API + in-process worker on :3000
 
 curl http://localhost:3000/health
 
+# Requires TEST_ORDERS_API_KEY (see .env.example) — the route fails closed
+# without it. Never use clientSlug "dovi" here: that client has real
+# WhatsApp credentials configured and this would send a real message.
 curl -X POST http://localhost:3000/api/test-orders \
   -H "Content-Type: application/json" \
-  -d '{"clientSlug":"dovi","externalOrderId":"TEST-001","customerPhone":"+573001234567","customerName":"Juan Pérez","total":89900}'
+  -H "x-api-key: $TEST_ORDERS_API_KEY" \
+  -d '{"clientSlug":"<a non-dovi test client>","externalOrderId":"TEST-001","customerPhone":"+573001234567","customerName":"Juan Pérez","total":89900}'
 ```
 
 ## Connecting a real Shopify store
