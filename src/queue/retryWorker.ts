@@ -6,6 +6,7 @@ import { findOrderById, markOrderNoShow } from "../db/repositories/ordersReposit
 import { findClientById } from "../db/repositories/clientsRepository";
 import { tryClaimIdempotencyKey } from "../db/repositories/idempotencyRepository";
 import { sendConfirmationMessage } from "../channels/whatsapp/cloudApiSender";
+import { notifyOperator, escapeMarkdown } from "../channels/telegram/notifier";
 import { recordMessage } from "../db/repositories/messagesRepository";
 import { logger } from "../observability/logger";
 
@@ -65,6 +66,10 @@ async function processRetryCheck(job: Job<RetryCheckJobData>) {
   if (nextDelay === null) {
     await markOrderNoShow(orderId);
     logger.info({ orderId }, "retry cadence exhausted, order marked no_show");
+    await notifyOperator(
+      client,
+      `⚠️ Pedido *#${order.externalOrderId}* sin respuesta, cadencia agotada (\`no_show\`)\nCliente: ${escapeMarkdown(order.customerName ?? "sin nombre")}\nTeléfono: ${escapeMarkdown(order.customerPhone)}`,
+    );
     return;
   }
 

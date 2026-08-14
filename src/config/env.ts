@@ -21,6 +21,10 @@ const envSchema = z.object({
   // Arbitrary string we choose, entered in Meta's webhook config UI too —
   // only used for the GET verification handshake, not from Meta.
   WHATSAPP_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
+  // BotFather token for operator notifications. Optional — notifyOperator
+  // no-ops (logs, doesn't throw) when unset, same soft-fail pattern as a
+  // client with no telegram_chat_id configured.
+  TELEGRAM_BOT_TOKEN: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);

@@ -75,7 +75,7 @@ whatsappWebhookRouter.post("/webhooks/whatsapp/messages", async (req, res) => {
 
   const confirmed = await markOrderConfirmed(order.id);
   if (confirmed) {
-    await markOrderDispatchedIfConfirmed(order.id);
+    await markOrderDispatchedIfConfirmed(order, client);
   }
 
   await recordMessage({

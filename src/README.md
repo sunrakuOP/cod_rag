@@ -40,7 +40,9 @@ its full retry cadence to `no_show`.
 src/
 ├── config/env.ts              # validates process.env with zod, fails fast on boot
 ├── domain/confirmation.ts     # shouldConfirm(order) — pure, no I/O, unit tested
-├── channels/whatsapp/         # cloudApiSender.ts — real Meta Graph API calls
+├── channels/
+│   ├── whatsapp/                # cloudApiSender.ts — real Meta Graph API calls
+│   └── telegram/notifier.ts     # notifyOperator() — best-effort, never throws
 ├── integrations/
 │   ├── shopify/                 # HMAC verification + payload mapping (pure, unit tested)
 │   ├── whatsapp/                # HMAC verification + inbound payload parsing (pure, unit tested)
@@ -79,6 +81,7 @@ src/
 - **Any inbound message counts as a confirmation** — there's no button-based template yet, so there's no structured yes/no signal to key off. A reply like "no quiero" gets marked confirmed the same as "sí". Documented simplification, revisit once an interactive-button template exists (see trade-offs).
 - Verified working: Meta's dashboard-triggered synthetic test payload reached the endpoint, passed signature verification, and was handled correctly. Real customer replies don't arrive yet — see "Known gap" above.
 - **After a successful confirm, `dispatchIntake.markOrderDispatchedIfConfirmed` runs**: calls the mock Dropi client, then flips `orders.status` to `dispatched`. Only runs when `markOrderConfirmed`'s return value says *this* call was the one that made the transition (not a stale in-memory `order.status` — see trade-offs) — a redelivered webhook for an already-dispatched order is a no-op, both by that check and by `markOrderDispatched`'s own guarded `UPDATE ... WHERE status = 'confirmed'`.
+- **Telegram operator notifications (`channels/telegram/notifier.ts`)** fire on two events: order dispatched (mock Dropi) and order marked `no_show` (retry cadence exhausted). `notifyOperator` never throws — a missing `TELEGRAM_BOT_TOKEN`, a missing `clients.telegram_chat_id`, or a failed API call all just log and return, per CLAUDE.md §4.6 ("fallo seguro": a notification channel must never block order processing). Customer-controlled fields (name, phone) are run through `escapeMarkdown` before interpolation — unescaped, a customer name containing `[text](url)` would render as a clickable link in the operator's chat (same fix already applied in the sibling Dovi backend, `~/proyectos/shopify/backend/src/telegram.js`).
 
 **Data model:** `clients` (tenant config, incl. `shopify_shop_domain` and `whatsapp_phone_number_id`) → `orders` → `messages` (every attempt, inbound and outbound) → `idempotency_keys` (dedup per order+event).
 
@@ -106,6 +109,7 @@ Nothing here is computed after the fact — every attempt is logged at the momen
 - **Publishing the app is a real, undone prerequisite for real inbound traffic** — it needs a public privacy-policy URL, and blocks on Dovi's Shopify store still being password-protected pre-launch. Not something to route around (a fake privacy-policy URL would be worse than leaving this documented as pending).
 - **Dropi dispatch mock runs inline (no queue), unlike WhatsApp sends.** The mock has no real I/O to fail or time out, so a BullMQ queue would be speculative infrastructure. Once a real Dropi token exists, this call becomes a fallible network request and should be promoted to the same queue+cadence+idempotency-key pattern already proven for WhatsApp (`confirmationQueue`/`retryQueue`) — not reinvented.
 - **No `dropi_order_id` column yet.** The mock's fake tracking id is only in the structured log (`order marked ready for dispatch (mock Dropi)`), not persisted. Add the column once a real Dropi call returns an id worth keeping for ops/metrics.
+- **`TELEGRAM_BOT_TOKEN` is a global env var, one bot for all clients; `telegram_chat_id` is per-client** — same split already established for WhatsApp (global token, per-client routing id). No client has a real `telegram_chat_id` seeded (unlike `whatsapp_phone_number_id`, which Dovi's row does carry) — there's no functional need for one yet, and wiring Dovi's real chat before `cod_rag` is actually promoted to serve Dovi would risk a real notification firing from dev/test traffic.
 - **`markOrderConfirmed` returns whether it actually made the transition**, instead of void — the caller's in-memory `order` object is stale the instant the UPDATE runs (built from a `pending_confirmation`-only query), so a boolean return is what tells `whatsappWebhook.ts` whether to trigger dispatch, not a re-check of the local object.
 
 ## Running locally

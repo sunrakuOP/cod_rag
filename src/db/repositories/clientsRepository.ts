@@ -6,9 +6,10 @@ export interface Client {
   slug: string;
   retryCadenceMinutes: number[];
   active: boolean;
+  telegramChatId: string | null;
 }
 
-const SELECT_CLIENT_COLUMNS = `id, name, slug, retry_cadence_minutes, active`;
+const SELECT_CLIENT_COLUMNS = `id, name, slug, retry_cadence_minutes, active, telegram_chat_id`;
 
 function mapClientRow(row: any): Client {
   return {
@@ -17,6 +18,7 @@ function mapClientRow(row: any): Client {
     slug: row.slug,
     retryCadenceMinutes: row.retry_cadence_minutes,
     active: row.active,
+    telegramChatId: row.telegram_chat_id,
   };
 }
 

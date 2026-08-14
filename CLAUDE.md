@@ -69,7 +69,7 @@ src/
 - [x] Un pedido de prueba entra, se confirma por WhatsApp (real, Cloud API) y queda registrado.
 - [x] Reintentos con cadencia configurable, idempotentes. **Gap conocido:** nada marca todavía un pedido como `confirmed` (falta el webhook entrante que lea la respuesta del cliente) — hasta que exista, todo pedido agota la cadena y termina en `no_show`. El mecanismo de reintento en sí ya está probado.
 - [x] Marcado a Dropi (mock aceptable) tras confirmación.
-- [ ] Notificación a Telegram.
+- [x] Notificación a Telegram.
 - [ ] Métricas: confirmación %, no-shows antes/después, pedidos/día automáticos (la tabla `messages` ya deja el rastro; falta el reporte).
 - [x] Config multi-cliente separada del código (tabla `clients`, seed `dovi`).
 - [x] README del módulo con Problema → Solución → Arquitectura → Métrica → Trade-offs (en inglés, sirve para portafolio) → `src/README.md`.
@@ -81,6 +81,19 @@ src/
 - Ver `ventas_canales_outreach.md` e `infraestructura_paso_a_paso.md` (raíz del repo) para oferta, precios, canales y cuentas. Nota: el `README.md` describe subcarpetas `negocio/`/`estudio/` que hoy no existen — estos archivos están sueltos en la raíz.
 
 ## 9. Estado actual (implementado — 2026-08-12 a 2026-08-13)
+
+> **⚠️ Guardrail (2026-08-13): no correr `/api/test-orders` con `clientSlug:"dovi"`.**
+> El cliente `dovi` en la DB ya tiene credenciales reales de Meta cargadas (WABA
+> `2097679467793481`, número real `+57 305 2589325`) — un test-order contra ese slug
+> puede disparar un WhatsApp real al número real de Dovi, no un mock. Dovi también tiene
+> un backend separado y anterior (`~/proyectos/shopify/backend/`, en un VPS, sesión de
+> Claude Code aparte) que es hoy el único sistema conectado al webhook real de Shopify
+> de Dovi — el webhook duplicado que `cod_rag` tenía hacia Railway ya se borró
+> (2026-08-13). `cod_rag` sigue teniendo las credenciales reales de `dovi` cargadas
+> porque el plan de fondo es que `cod_rag` termine reemplazando a ese backend (Dovi es
+> "cliente #0", §1) — pero **no antes de tenerlo listo** (plantilla de WhatsApp propia
+> aprobada, Telegram, y una decisión explícita de promoverlo). Hasta entonces, para
+> pruebas manuales usar un `clientSlug` de prueba nuevo, no `dovi`.
 
 Vertical delgado corriendo local, probado end-to-end (`POST /api/test-orders` →
 `shouldConfirm` → idempotencia en DB → BullMQ → mock WhatsApp sender → log en
@@ -109,6 +122,10 @@ npm run dev               # API + worker en :3000
 - **Webhook entrante de WhatsApp construido y verificado (2026-08-13).** `POST /webhooks/whatsapp/messages`: firma `X-Hub-Signature-256` (formato distinto al de Shopify — hex con prefijo `sha256=`, firmado con el App Secret de Meta, no el token de acceso), resuelve el cliente por `whatsapp_phone_number_id` (columna nueva en `clients`, mismo patrón que `shopify_shop_domain`), y marca `confirmed` el pedido pendiente más reciente de ese teléfono. **Simplificación explícita:** cualquier respuesta cuenta como confirmación (no hay plantilla con botones todavía, así que no hay señal sí/no estructurada). Probado con el payload sintético que ofrece el dashboard de Meta: llegó, verificó firma, se procesó bien.
 - **Bloqueado: mensajes reales de WhatsApp no llegan todavía.** La app `dovi-bot-confirmacion` sigue "Sin publicar" — mientras no esté publicada, Meta solo entrega los payloads de prueba del dashboard, no mensajes de clientes reales (confirmado empíricamente: un WhatsApp real mandado al número de Dovi nunca llegó al webhook). Para publicar, Meta exige una URL de política de privacidad pública — la de Shopify (`tiendadovi.com/policies/privacy-policy`) está protegida con contraseña (tienda en modo pre-lanzamiento) y ni siquiera muestra el contenido correcto. Decisión del dueño: **queda pendiente por ahora**, no se fuerza ninguna solución (nada de URLs falsas). Estado re-verificado 2026-08-13: la plantilla `order_confirmation` sigue **En revisión** en WhatsApp Manager y la tienda sigue devolviendo `302 → /password` — ninguno de los dos bloqueos se movió.
 - **Marcado a Dropi (mock) implementado (2026-08-13).** `integrations/dropi/mockClient.ts` + `api/services/dispatchIntake.ts`: tras un `confirmed` real (webhook entrante de WhatsApp), se llama al mock (siempre "exitoso", genera un `dropiOrderId` fake) y el pedido pasa a `dispatched` — status que ya existía en el dominio (`OrderStatus`) sin usarse hasta ahora. Corre inline, sin cola (el mock no tiene I/O que falle; promoverlo a cola+cadencia+idempotencia como WhatsApp queda para cuando haya token real de Dropi — documentado en trade-offs de `src/README.md`). Probado end-to-end local (Docker Postgres/Redis, server local, secreto de firma de prueba): pedido confirmado por webhook → mock disparado → `orders.status = 'dispatched'` verificado en DB. Probado también el caso de reentrega del mismo webhook (WhatsApp entrega at-least-once): sin duplicar el despacho, gracias al guard `UPDATE ... WHERE status = 'confirmed'` en `markOrderDispatched` — `markOrderConfirmed` ahora devuelve si de verdad hizo la transición, en vez de `void`, porque el objeto `order` en memoria queda desactualizado apenas corre el UPDATE.
+
+- **Descubierto y corregido: webhook duplicado con un backend anterior de Dovi (2026-08-13).** Existe otro backend, más viejo y no relacionado con esta sesión (`~/proyectos/shopify/backend/`, Node/Express/SQLite, en un VPS Hetzner desde el 03-08, dominio `api.tiendadovi.com`), construido en una sesión de Claude Code separada que no sabía de `cod_rag` (ni viceversa). Shopify tenía **dos** suscripciones activas a "Creación de pedido" — una a ese VPS, otra a Railway — cada pedido real de Dovi disparaba los dos sistemas en paralelo. Se verificó en vivo (WhatsApp Manager) que el número real `+57 305 2589325` está conectado bajo la WABA de `cod_rag` (`2097679467793481`); la WABA del VPS (`1352075190449142`) solo tiene el número de sandbox — no fue un "robo" de número, el VPS simplemente nunca llegó a conectar el real (bloqueado en la verificación de negocio de Meta, seguía "pendiente" en su propia memoria al 2026-08-12). **Sin impacto a clientes reales:** la tienda sigue en modo contraseña, cero pedidos reales pasaron por ninguno de los dos. Se decidió (con el dueño): el VPS queda como el único sistema conectado al tráfico real de Dovi por ahora (ya tiene WhatsApp+Telegram+Dropi-manual funcionando); el webhook duplicado hacia Railway **se borró** en Shopify Admin. `cod_rag` sigue con las credenciales reales de `dovi` cargadas (ver guardrail arriba) porque el plan es que eventualmente la reemplace, no antes de estar lista.
+
+- **Notificación a Telegram implementada (2026-08-13).** `channels/telegram/notifier.ts` (`notifyOperator`, `escapeMarkdown`) + `telegram_chat_id` nuevo en `clients` (nullable, sin backfill a propósito — ver guardrail arriba). Dos disparadores: pedido despachado (mock Dropi) y pedido marcado `no_show` (cadencia agotada). Nunca tira excepción — token o chat_id sin configurar, o un fallo de la API de Telegram, solo loguean (CLAUDE.md §4.6). Probado end-to-end local con un cliente de prueba dedicado (nunca `dovi`) y un token de Telegram falso: el flujo completo corrió sin crashear, el fallo 401 de Telegram quedó logueado y el pedido siguió su curso normal (confirmado → despachado).
 
 **Siguiente paso propuesto:** cuando la tienda de Dovi salga de modo
 pre-lanzamiento (o haya otra URL pública de política de privacidad), publicar
