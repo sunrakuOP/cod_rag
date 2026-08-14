@@ -25,6 +25,11 @@ const envSchema = z.object({
   // no-ops (logs, doesn't throw) when unset, same soft-fail pattern as a
   // client with no telegram_chat_id configured.
   TELEGRAM_BOT_TOKEN: z.string().optional(),
+  // Shared secret for GET /api/metrics (x-api-key header). Optional so the
+  // app still boots without it — but unlike WhatsApp/Telegram, the metrics
+  // route itself fails closed (500) when unset, since there's no safe
+  // "soft-fail" for an endpoint that exposes per-client business data.
+  METRICS_API_KEY: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);

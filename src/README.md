@@ -89,11 +89,15 @@ src/
 
 `messages.status` + `messages.cost_estimate` are the raw material for confirmation rate, cost per confirmation, and no-shows. Nothing here is computed after the fact — every attempt is logged at the moment it happens.
 
-**`npm run report:metrics [-- --client=<slug>]` (console report, 2026-08-13).** Queries `orders`/`messages` directly (`src/scripts/reportMetrics.ts`, no HTTP endpoint) and prints: orders by status, confirmation rate, no-show rate (+ delta against a configured baseline), cost per confirmation, messages by status, orders/day.
+Query logic lives in `observability/metricsReport.ts` (`getMetricsReport(clientSlug?)`, returns structured JSON) — both the CLI script and the HTTP route below call it, so the SQL exists in exactly one place.
 
-Before/after no-show comparison and cost per confirmation both depend on two nullable columns on `clients` (`baseline_no_show_rate`, `whatsapp_utility_cost_estimate`, migration `1786671243376`) that only the operator can fill in — a pre-automation no-show rate and a real WhatsApp Cloud API template price aren't things this system ever measured itself. Deliberately not defaulted: WhatsApp utility-template pricing varies by country/category and changes over time, so a hardcoded "current" price would go stale silently. Until an operator sets them, the report says "sin datos"/"sin configurar" rather than showing a misleading `0`. `cloudApiSender.ts` still returns `costEstimate: 0` (Meta's send response carries no price); `confirmationWorker`/`retryWorker` override it with `client.whatsappUtilityCostEstimate` at send time, so cost is only ever what was configured *when that message went out* — loading a cost later doesn't rewrite already-sent messages.
+**`npm run report:metrics [-- --client=<slug>]`** (`src/scripts/reportMetrics.ts`) prints: orders by status, confirmation rate, no-show rate (+ delta against a configured baseline), cost per confirmation, messages by status, orders/day.
 
-**Left for next session:** console-only; an HTTP endpoint (`GET /api/metrics`) would be the natural next step if this needs to feed a dashboard instead of being run by hand.
+**`GET /api/metrics?client=<slug>`** (2026-08-13) returns the same data as JSON. Requires an `x-api-key` header matching `METRICS_API_KEY` (`timingSafeEqual`, same pattern as Shopify's HMAC check) — fails closed with 500 (`metrics_not_configured`) if that env var isn't set, rather than defaulting open, since this endpoint exposes per-client business data on a public Railway URL. Wrong/missing key → 401.
+
+Before/after no-show comparison and cost per confirmation both depend on two nullable columns on `clients` (`baseline_no_show_rate`, `whatsapp_utility_cost_estimate`, migration `1786671243376`) that only the operator can fill in — a pre-automation no-show rate and a real WhatsApp Cloud API template price aren't things this system ever measured itself. Deliberately not defaulted: WhatsApp utility-template pricing varies by country/category and changes over time, so a hardcoded "current" price would go stale silently. Until an operator sets them, both the CLI and the HTTP report say "sin datos"/`null` rather than showing a misleading `0`. `cloudApiSender.ts` still returns `costEstimate: 0` (Meta's send response carries no price); `confirmationWorker`/`retryWorker` override it with `client.whatsappUtilityCostEstimate` at send time, so cost is only ever what was configured *when that message went out* — loading a cost later doesn't rewrite already-sent messages.
+
+**Left for next session:** `METRICS_API_KEY` needs to be set in Railway for the route to respond in production — until then it's a deliberate 500, not a bug.
 
 ## Trade-offs
 

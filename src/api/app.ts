@@ -3,6 +3,7 @@ import { healthRouter } from "./routes/health";
 import { testOrdersRouter } from "./routes/testOrders";
 import { shopifyWebhookRouter } from "./routes/shopifyWebhook";
 import { whatsappWebhookRouter } from "./routes/whatsappWebhook";
+import { metricsRouter } from "./routes/metrics";
 import { logger } from "../observability/logger";
 
 export function createApp() {
@@ -22,6 +23,7 @@ export function createApp() {
   app.use(testOrdersRouter);
   app.use(shopifyWebhookRouter);
   app.use(whatsappWebhookRouter);
+  app.use(metricsRouter);
 
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     logger.error({ err }, "unhandled request error");
