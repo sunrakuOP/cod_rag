@@ -7,9 +7,11 @@ export interface Client {
   retryCadenceMinutes: number[];
   active: boolean;
   telegramChatId: string | null;
+  baselineNoShowRate: number | null;
+  whatsappUtilityCostEstimate: number | null;
 }
 
-const SELECT_CLIENT_COLUMNS = `id, name, slug, retry_cadence_minutes, active, telegram_chat_id`;
+const SELECT_CLIENT_COLUMNS = `id, name, slug, retry_cadence_minutes, active, telegram_chat_id, baseline_no_show_rate, whatsapp_utility_cost_estimate`;
 
 function mapClientRow(row: any): Client {
   return {
@@ -19,6 +21,9 @@ function mapClientRow(row: any): Client {
     retryCadenceMinutes: row.retry_cadence_minutes,
     active: row.active,
     telegramChatId: row.telegram_chat_id,
+    baselineNoShowRate: row.baseline_no_show_rate === null ? null : Number(row.baseline_no_show_rate),
+    whatsappUtilityCostEstimate:
+      row.whatsapp_utility_cost_estimate === null ? null : Number(row.whatsapp_utility_cost_estimate),
   };
 }
 

@@ -11,6 +11,12 @@ import { logger } from "../observability/logger";
 async function processConfirmation(job: Job<ConfirmationJobData>) {
   const { orderId, clientId, phone, templateName } = job.data;
 
+  const client = await findClientById(clientId);
+  if (!client) {
+    logger.error({ orderId, clientId }, "cannot process confirmation: client not found");
+    return;
+  }
+
   try {
     const result = await sendConfirmationMessage({ phone, orderId, templateName });
 
@@ -22,7 +28,10 @@ async function processConfirmation(job: Job<ConfirmationJobData>) {
       templateName,
       status: "sent",
       providerMessageId: result.providerMessageId,
-      costEstimate: result.costEstimate,
+      // The Cloud API response never carries price, so cloudApiSender always
+      // returns 0 — the real per-message cost only exists if the operator
+      // configured it (CLAUDE.md metrics gap, see clients migration).
+      costEstimate: client.whatsappUtilityCostEstimate ?? result.costEstimate,
     });
 
     logger.info({ orderId, jobId: job.id }, "confirmation message sent");
@@ -40,12 +49,6 @@ async function processConfirmation(job: Job<ConfirmationJobData>) {
       status: "failed",
     });
     logger.error({ orderId, jobId: job.id, err }, "confirmation send failed");
-  }
-
-  const client = await findClientById(clientId);
-  if (!client) {
-    logger.error({ orderId, clientId }, "cannot schedule retry cadence: client not found");
-    return;
   }
 
   const firstDelay = nextRetryDelayMinutes(client.retryCadenceMinutes, 1);

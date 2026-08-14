@@ -31,10 +31,10 @@ interface WhatsAppSendResponse {
  * input/output shape as the mock it replaces (phone/template in, provider
  * id/cost out), so the queue and domain layers didn't need to change.
  *
- * costEstimate is hardcoded 0: the send response doesn't include price,
- * and real per-message cost tracking needs Meta's pricing/analytics API or
- * a lookup table by country+category — not built yet, flagged here so it
- * doesn't get mistaken for a real number in the metrics.
+ * costEstimate is hardcoded 0: the send response doesn't include price.
+ * Callers (confirmationWorker, retryWorker) override this with
+ * client.whatsappUtilityCostEstimate when the operator has configured it —
+ * this function has no way to know the real per-message price itself.
  */
 export async function sendConfirmationMessage(
   params: SendConfirmationParams,

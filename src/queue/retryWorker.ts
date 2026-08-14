@@ -45,7 +45,7 @@ async function processRetryCheck(job: Job<RetryCheckJobData>) {
         templateName,
         status: "sent",
         providerMessageId: result.providerMessageId,
-        costEstimate: result.costEstimate,
+        costEstimate: client.whatsappUtilityCostEstimate ?? result.costEstimate,
       });
       logger.info({ orderId, attemptNumber }, "retry confirmation sent");
     } catch (err) {
