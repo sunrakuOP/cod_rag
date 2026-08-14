@@ -14,7 +14,8 @@
     "migrate:up": "dotenv -e .env -- node-pg-migrate up --migrations-dir src/db/migrations",
     "migrate:down": "dotenv -e .env -- node-pg-migrate down --migrations-dir src/db/migrations",
     "migrate:create": "node-pg-migrate create --migrations-dir src/db/migrations",
-    "migrate:up:prod": "node-pg-migrate up --migrations-dir src/db/migrations"
+    "migrate:up:prod": "node-pg-migrate up --migrations-dir src/db/migrations",
+    "report:metrics": "dotenv -e .env -- tsx src/scripts/reportMetrics.ts"
   },
   "keywords": [],
   "author": "",

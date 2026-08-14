@@ -87,12 +87,12 @@ src/
 
 ## Metrics
 
-`messages.status` + `messages.cost_estimate` are the raw material for:
-- Confirmation rate (`mocked_sent` / total orders needing confirmation).
-- Cost per confirmation (real once WhatsApp is live — 0 in mock mode).
-- No-shows before/after — `orders.status` now transitions to `confirmed` (inbound webhook) and `no_show` (retry cadence exhausted); a reporting query over this is the next natural step, not built yet.
+`messages.status` + `messages.cost_estimate` are the raw material for confirmation rate, cost per confirmation, and no-shows. Nothing here is computed after the fact — every attempt is logged at the moment it happens.
 
-Nothing here is computed after the fact — every attempt is logged at the moment it happens.
+**`npm run report:metrics [-- --client=<slug>]` (v1, console report, 2026-08-13).** Queries `orders`/`messages` directly (`src/scripts/reportMetrics.ts`, no HTTP endpoint) and prints: orders by status, confirmation rate (`confirmed`+`dispatched` / orders past `pending_confirmation`), messages by status, orders/day. **Left unfinished on purpose, next session:**
+- No before/after no-show comparison — that needs an external baseline (Dovi's pre-automation no-show rate isn't tracked anywhere in this system) to compare against, not just a query over `orders`.
+- Cost per confirmation isn't in the report yet — `messages.cost_estimate` is summable, just not wired in.
+- Console-only; an HTTP endpoint (`GET /api/metrics`) would be the natural next step if this needs to feed a dashboard instead of being run by hand.
 
 ## Trade-offs
 
